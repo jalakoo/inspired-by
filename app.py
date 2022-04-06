@@ -20,11 +20,16 @@ driver = GraphDatabase.driver(neo4jUrl, auth=basic_auth(neo4jUser, neo4jPass))
 
 session = driver.session()
 
-# Add uniqueness constraints.
-# session.run( "CREATE CONSTRAINT ON (t:Tweet) ASSERT t.id IS UNIQUE;")
-# session.run( "CREATE CONSTRAINT ON (u:User) ASSERT u.screen_name IS UNIQUE;")
-# session.run( "CREATE CONSTRAINT ON (h:Tag) ASSERT h.name IS UNIQUE;")
-# session.run( "CREATE CONSTRAINT ON (l:Link) ASSERT l.url IS UNIQUE;")
+# Add uniqueness constraints - if not already present.
+constraints = list(session.run("CALL apoc.schema.assert(null,{Assetcategory:['name']},False)"))
+if any(obj['label'] == 'Tweet' for obj in constraints) == False:
+    session.run( "CREATE CONSTRAINT ON (t:Tweet) ASSERT t.id IS UNIQUE;")
+if any(obj['label'] == 'User' for obj in constraints) == False:
+    session.run( "CREATE CONSTRAINT ON (u:User) ASSERT u.screen_name IS UNIQUE;")
+if any(obj['label'] == 'Tag' for obj in constraints) == False:
+    session.run( "CREATE CONSTRAINT ON (h:Tag) ASSERT h.name IS UNIQUE;")
+if any(obj['label'] == 'Link' for obj in constraints) == False:
+    session.run( "CREATE CONSTRAINT ON (l:Link) ASSERT l.url IS UNIQUE;")
 
 # Build query.
 importQuery = """
@@ -36,43 +41,26 @@ WITH t,
      t.user AS u,
      t.retweeted_status AS retweet
 MERGE (tweet:Tweet {id:t.id})
-SET tweet:Content, tweet.text = t.text,
+SET tweet.text = t.text,
     tweet.created = t.created_at,
-    tweet.favorites = t.favorite_count
+    tweet.id = t.id
 MERGE (user:User {screen_name:u.screen_name})
-SET user.name = u.name,
-    user.location = u.location,
-    user.followers = u.followers_count,
-    user.following = u.friends_count,
-    user.statuses = u.statuses_count,
-    user.profile_image_url = u.profile_image_url
+SET user.name = u.name
 MERGE (user)-[:POSTED]->(tweet)
 FOREACH (h IN e.hashtags |
   MERGE (tag:Tag {name:toLower(h.text)})
   MERGE (tag)<-[:TAGGED]-(tweet)
-)
-FOREACH (u IN e.urls |
-  MERGE (url:Link {url:u.expanded_url})
-  MERGE (tweet)-[:LINKED]->(url)
 )
 FOREACH (m IN e.user_mentions |
   MERGE (mentioned:User {screen_name:m.screen_name})
   ON CREATE SET mentioned.name = m.name
   MERGE (tweet)-[:MENTIONED]->(mentioned)
 )
-FOREACH (r IN [r IN [t.in_reply_to_status_id] WHERE r IS NOT NULL] |
-  MERGE (reply_tweet:Tweet {id:r})
-  MERGE (tweet)-[:REPLIED_TO]->(reply_tweet)
-)
-FOREACH (retweet_id IN [x IN [retweet.id] WHERE x IS NOT NULL] |
-    MERGE (retweet_tweet:Tweet {id:retweet_id})
-    MERGE (tweet)-[:RETWEETED]->(retweet_tweet)
-)
 """
 
 # todo as params
-q = urllib.parse.quote_plus(os.environ.get("TWITTER_SEARCH",'neo4j OR "graph database" OR "graph databases" OR graphdb OR graphconnect OR @neoquestions OR @Neo4jDE OR @Neo4jFr OR neotechnology'))
-maxPages = 20
+q = urllib.parse.quote_plus(os.environ.get("TWITTER_SEARCH",'#inspiredby'))
+maxPages = 5
 catch_up = False
 count = 100
 result_type = "recent"
@@ -94,6 +82,7 @@ while hasMore and page <= maxPages:
             max_id = record["maxId"]
 
     # Build URL.
+    print(f'url query: {q}')
     apiUrl = "https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%s&result_type=%s&lang=%s" % (q, count, result_type, lang)
     if since_id != -1 :
         apiUrl += "&since_id=%s" % (since_id)
@@ -107,9 +96,11 @@ while hasMore and page <= maxPages:
     meta = json["search_metadata"]
     # print(meta)
 
-    tweets = json.get("statuses",[])    
+    tweets = json.get("statuses",[])   
+    # print(tweets) 
     print(len(tweets))
     if len(tweets) > 0:
+        # print(tweets[0])
         result = session.run(importQuery,{"tweets":tweets})
         print(result.consume().counters)
         page = page + 1
