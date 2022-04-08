@@ -84,19 +84,23 @@ class TwitterUtils:
         SET user.name = u.name
         MERGE (user)-[:POSTED]->(tweet)
         FOREACH (h IN e.hashtags |
-        MERGE (tag:Tag {name:toLower(h.text)})
-        MERGE (tag)<-[:TAGGED]-(tweet)
-        )
+            MERGE (tag:Tag {name:toLower(h.text)})
+            MERGE (tag)<-[:TAGGED]-(tweet)
+            )
+        FOREACH (u IN e.urls |
+            MERGE (url:Link {url:u.expanded_url})
+            MERGE (tweet)-[:LINKED]->(url)
+            )
         FOREACH (m IN e.user_mentions |
-        MERGE (mentioned:User {screen_name:m.screen_name})
-        ON CREATE SET mentioned.name = m.name
-        MERGE (tweet)-[:MENTIONED]->(mentioned)
-        )
+            MERGE (mentioned:User {screen_name:m.screen_name})
+            ON CREATE SET mentioned.name = m.name
+            MERGE (tweet)-[:MENTIONED]->(mentioned)
+            )
         """
 
         # todo as params
         q = urllib.parse.quote_plus(query)
-        maxPages = 5
+        maxPages = 3
         catch_up = False
         count = 100
         result_type = "recent"
@@ -127,7 +131,7 @@ class TwitterUtils:
             response = requests.get(apiUrl, headers = {"accept":"application/json","Authorization":"Bearer " + bearer_token})
             if response.status_code != 200:
                 raise("%s : %s" % (response.status_code, response.text))
-                
+            logging.info(response.text)
             json = response.json()
             meta = json["search_metadata"]
             # print(meta)

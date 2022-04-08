@@ -1,10 +1,13 @@
+
 import os
 import logging
 from PIL import Image 
 from dotenv import load_dotenv
 from env_validate import validate_env
+# TODO: Create a package instead?
 from twitter_utils import TwitterUtils
 from neo4j_utils import Neo4jUtils
+from link_utils import graph_image
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s")
@@ -31,7 +34,8 @@ t = TwitterUtils(twitterApiKey, twitterSecret, twitterBearerToken, twitterAccess
 n = Neo4jUtils(neo4jUrl, neo4jUser, neo4jPass)
 
 # Run
-# t.import_tweets_v1("#inspiredby", twitterBearerTokenV1, n.session)
+t.import_tweets_v1('#neo4j AND #inspiredby filter:mentions -filter:retweets', twitterBearerTokenV1, n.session)
+
 # new_tweets = n.new_tweets()
 # for tweet in new_tweets:
 #     screen_name = tweet['screen_name']
@@ -42,27 +46,8 @@ n = Neo4jUtils(neo4jUrl, neo4jUser, neo4jPass)
 #     print(image_url)
 #     create_tweet({'text':'Playing with Bots!'}, )
 
-
-def get_graph_image(screen_name):
-    import urllib
-    from PIL import Image
-    import requests
-    import io
-    # from io import StringIO
-
-    params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
-    image_url = "https://inspired-graph.herokuapp.com"
-    query = urllib.parse.urlencode( params ) 
-    image_url = image_url + "?" + query
-    response = requests.get(image_url)
-    img = Image.open(io.BytesIO(response.content))
-    # img = Image.open(StringIO(response.content))
-    return img
-
-img = get_graph_image('mesirii')
-t.post_tweet_with_image('Testing with bots', img)
-# setup_constraints(session)
-# import_tweets_v1('#inspiredby', session, bearer_token=bearerToken)
+# img = get_graph_image('mesirii')
+# t.post_tweet_with_image('Testing with bots', img)
 # tweet('Hello from bots', twitterApiKey, twitterSecret, twitterAccessToken, twitterAccessSecret)
 
 # Get access tokens for instance
