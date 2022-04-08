@@ -1,114 +1,97 @@
 import os
-import time
-import requests
-import urllib
-from neo4j import GraphDatabase, basic_auth
+import logging
+from PIL import Image 
 from dotenv import load_dotenv
 from env_validate import validate_env
+from twitter_utils import TwitterUtils
+from neo4j_utils import Neo4jUtils
+
+# Setup Logging
+logging.basicConfig(level=logging.INFO, format="[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s")
+
+# Get config
 load_dotenv(verbose=True)
 validate_env()
-
 neo4jUrl = os.environ.get('NEO4J_URL',"bolt://localhost")
 neo4jUser = os.environ.get('NEO4J_USER',"neo4j")
 neo4jPass = os.environ.get('NEO4J_PASSWORD',"test")
-bearerToken = os.environ.get('TWITTER_BEARER',"")
+twitterApiKey = os.environ.get('TWITTER_API_KEY', "")
+twitterSecret = os.environ.get('TWITTER_SECRET', "")
+twitterAccessToken = os.environ.get('TWITTER_ACCESS_TOKEN', "")
+twitterAccessSecret = os.environ.get('TWITTER_ACCESS_SECRET', "")
+twitterBearerToken = os.environ.get('TWITTER_BEARER',"")
+twitterBearerTokenV1 = os.environ.get('TWITTER_BEARER_V1',"")
 
-if len(bearerToken) == 0 : 
+# TODO: Check all values available
+if len(twitterBearerToken) == 0 : 
     raise("No Twitter Bearer token configured")
+
+# Init
+t = TwitterUtils(twitterApiKey, twitterSecret, twitterBearerToken, twitterAccessToken, twitterAccessSecret)
+n = Neo4jUtils(neo4jUrl, neo4jUser, neo4jPass)
+
+# Run
+# t.import_tweets_v1("#inspiredby", twitterBearerTokenV1, n.session)
+# new_tweets = n.new_tweets()
+# for tweet in new_tweets:
+#     screen_name = tweet['screen_name']
+#     image_params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
+#     image_url = "https://inspired-graph.herokuapp.com"
+#     query_string = urllib.parse.urlencode( image_params ) 
+#     image_url = image_url + "?" + query_string 
+#     print(image_url)
+#     create_tweet({'text':'Playing with Bots!'}, )
+
+
+def get_graph_image(screen_name):
+    import urllib
+    from PIL import Image
+    import requests
+    import io
+    # from io import StringIO
+
+    params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
+    image_url = "https://inspired-graph.herokuapp.com"
+    query = urllib.parse.urlencode( params ) 
+    image_url = image_url + "?" + query
+    response = requests.get(image_url)
+    img = Image.open(io.BytesIO(response.content))
+    # img = Image.open(StringIO(response.content))
+    return img
+
+img = get_graph_image('mesirii')
+t.post_tweet_with_image('Testing with bots', img)
+# setup_constraints(session)
+# import_tweets_v1('#inspiredby', session, bearer_token=bearerToken)
+# tweet('Hello from bots', twitterApiKey, twitterSecret, twitterAccessToken, twitterAccessSecret)
+
+# Get access tokens for instance
+# if len(twitterAccessToken) == 0 or len(twitterAccessSecret) == 0:
+#     twitterAccessToken, twitterAccessSecret = twitter_access_tokens(twitterApiKey, twitterSecret)
+
+# tweet_v2({'text': 'Hello from a bot'}, twitterApiKey, twitterSecret, twitterAccessToken, twitterAccessSecret)
+
+# Grab all tweets we have not yet responded to
+# todo_query = """
+# MATCH (u1:User)-[:POSTED]->(t)-[:MENTIONED]->(u2:User),(t)-[:TAGGED]->(:Tag {name:"inspiredby"})
+# WHERE t:Tweet AND NOT t:Replied
+# RETURN u1.screen_name as screen_name, t.twitter_id as tid, t.text as text
+# """
+# todo_tweets = list(session.run(todo_query))
+# for tweet in todo_tweets:
+#     screen_name = tweet['screen_name']
+#     image_params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
+#     image_url = "https://inspired-graph.herokuapp.com"
+#     query_string = urllib.parse.urlencode( image_params ) 
+#     image_url = image_url + "?" + query_string 
+#     print(image_url)
+#     create_tweet({'text':'Playing with Bots!'}, )
+
     
-driver = GraphDatabase.driver(neo4jUrl, auth=basic_auth(neo4jUser, neo4jPass))
 
-session = driver.session()
+# Post a tweet to each user with the new graph.
+# post_message = ''
+# post_url = 'https://api.twitter.com/1.1/statuses/update.json?status=%s&attachment_url=%s' % (post_message, post_image_url)
+# post_response = requests.post(post_url, headers = {"accept":"application/json","Authorization":"Bearer " + bearerToken})
 
-# Add uniqueness constraints - if not already present.
-constraints = list(session.run("CALL apoc.schema.assert(null,{Assetcategory:['name']},False)"))
-if any(obj['label'] == 'Tweet' for obj in constraints) == False:
-    session.run( "CREATE CONSTRAINT ON (t:Tweet) ASSERT t.id IS UNIQUE;")
-if any(obj['label'] == 'User' for obj in constraints) == False:
-    session.run( "CREATE CONSTRAINT ON (u:User) ASSERT u.screen_name IS UNIQUE;")
-if any(obj['label'] == 'Tag' for obj in constraints) == False:
-    session.run( "CREATE CONSTRAINT ON (h:Tag) ASSERT h.name IS UNIQUE;")
-if any(obj['label'] == 'Link' for obj in constraints) == False:
-    session.run( "CREATE CONSTRAINT ON (l:Link) ASSERT l.url IS UNIQUE;")
-
-# Build query.
-importQuery = """
-UNWIND $tweets AS t
-WITH t
-ORDER BY t.id
-WITH t,
-     t.entities AS e,
-     t.user AS u,
-     t.retweeted_status AS retweet
-MERGE (tweet:Tweet {id:t.id})
-SET tweet.text = t.text,
-    tweet.created = t.created_at,
-    tweet.id = t.id
-MERGE (user:User {screen_name:u.screen_name})
-SET user.name = u.name
-MERGE (user)-[:POSTED]->(tweet)
-FOREACH (h IN e.hashtags |
-  MERGE (tag:Tag {name:toLower(h.text)})
-  MERGE (tag)<-[:TAGGED]-(tweet)
-)
-FOREACH (m IN e.user_mentions |
-  MERGE (mentioned:User {screen_name:m.screen_name})
-  ON CREATE SET mentioned.name = m.name
-  MERGE (tweet)-[:MENTIONED]->(mentioned)
-)
-"""
-
-# todo as params
-q = urllib.parse.quote_plus(os.environ.get("TWITTER_SEARCH",'#inspiredby'))
-maxPages = 5
-catch_up = False
-count = 100
-result_type = "recent"
-lang = "en"
-
-since_id = -1
-max_id = -1
-page = 1
-
-hasMore = True
-while hasMore and page <= maxPages:
-    if catch_up:
-        result = session.run("MATCH (t:Tweet) RETURN max(t.id) as sinceId")
-        for record in result:
-            since_id = record["sinceId"]
-    else:
-        result = session.run("MATCH (t:Tweet) RETURN min(t.id) as maxId")
-        for record in result:
-            max_id = record["maxId"]
-
-    # Build URL.
-    print(f'url query: {q}')
-    apiUrl = "https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%s&result_type=%s&lang=%s" % (q, count, result_type, lang)
-    if since_id != -1 :
-        apiUrl += "&since_id=%s" % (since_id)
-    if max_id != -1 :
-        apiUrl += "&max_id=%s" % (max_id)
-    response = requests.get(apiUrl, headers = {"accept":"application/json","Authorization":"Bearer " + bearerToken})
-    if response.status_code != 200:
-        raise("%s : %s" % (response.status_code, response.text))
-        
-    json = response.json()
-    meta = json["search_metadata"]
-    # print(meta)
-
-    tweets = json.get("statuses",[])   
-    # print(tweets) 
-    print(len(tweets))
-    if len(tweets) > 0:
-        # print(tweets[0])
-        result = session.run(importQuery,{"tweets":tweets})
-        print(result.consume().counters)
-        page = page + 1
-    else:
-        hasMore = False
-        
-    print("page {page} max_id {max_id}".format(page=page,max_id=max_id))
-    time.sleep(1)
-    if json.get('backoff',None) != None:
-        print("backoff",json['backoff'])
-        time.sleep(json['backoff']+5)
+# Assign the 'Replied' label to all tweets we've responded to
