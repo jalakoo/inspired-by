@@ -61,6 +61,7 @@ class TwitterUtils:
         #                access_token_secret=self._access_secret)
         
 
+    # TODO: replace direct use of neo4j session with a callback
     def import_tweets_v1(self, query, bearer_token, neo4j_session):
         # Original script - still works with v1.1 API
         import urllib
@@ -221,5 +222,8 @@ class TwitterUtils:
 
     def post_tweet_with_image(self, message, image):
         # Can't upload with v2! Need to use v1
+        # TODO
         url = 'https://upload.twitter.com/1.1/media/upload.json?media_category=tweet_image'
+        print('unimplemented')
+
 

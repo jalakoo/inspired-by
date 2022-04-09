@@ -30,7 +30,27 @@ class Neo4jUtils:
         query = """
         MATCH (u1:User)-[:POSTED]->(t)-[:MENTIONED]->(u2:User),(t)-[:TAGGED]->(:Tag {name:"inspiredby"})
         WHERE t:Tweet AND NOT t:Replied
-        RETURN u1.screen_name as screen_name, t.twitter_id as tid, t.text as text
+        RETURN u1.screen_name as screen_name, t.twitter_id as twitter_id, t.text as text
         """
-        tweets = list(self.session.run(query))
-        return tweets
+        try:
+            tweets = list(self.session.run(query))
+            return tweets
+        except Exception as e:
+            logging.error(e)
+            return []
+
+    def processed_tweet(self, tweet):
+        tid = tweet.get('twitter_id', '')
+        if len(tid) == 0:
+            raise Exception(f'tweet missing twitter_id value')
+        query = f"""
+        MATCH (t:Tweet {{ twitter_id: {tid} }})
+        SET t:Replied
+        """
+        logging.info(f'processing tweet query: {query}')
+        try:
+            self.session.run(query)
+        except Exception as e:
+            logging.error(e)
+
+    

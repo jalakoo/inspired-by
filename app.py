@@ -1,7 +1,6 @@
 
 import os
 import logging
-from PIL import Image 
 from dotenv import load_dotenv
 from env_validate import validate_env
 # TODO: Create a package instead?
@@ -15,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format="[%(filename)s:%(lineno)s - %(fun
 # Get config
 load_dotenv(verbose=True)
 validate_env()
+
 neo4jUrl = os.environ.get('NEO4J_URL',"bolt://localhost")
 neo4jUser = os.environ.get('NEO4J_USER',"neo4j")
 neo4jPass = os.environ.get('NEO4J_PASSWORD',"test")
@@ -32,51 +32,25 @@ if len(twitterBearerToken) == 0 :
 # Init
 t = TwitterUtils(twitterApiKey, twitterSecret, twitterBearerToken, twitterAccessToken, twitterAccessSecret)
 n = Neo4jUtils(neo4jUrl, neo4jUser, neo4jPass)
-
-# Run
-t.import_tweets_v1('#neo4j AND #inspiredby filter:mentions -filter:retweets', twitterBearerTokenV1, n.session)
-
-# new_tweets = n.new_tweets()
-# for tweet in new_tweets:
-#     screen_name = tweet['screen_name']
-#     image_params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
-#     image_url = "https://inspired-graph.herokuapp.com"
-#     query_string = urllib.parse.urlencode( image_params ) 
-#     image_url = image_url + "?" + query_string 
-#     print(image_url)
-#     create_tweet({'text':'Playing with Bots!'}, )
-
-# img = get_graph_image('mesirii')
-# t.post_tweet_with_image('Testing with bots', img)
-# tweet('Hello from bots', twitterApiKey, twitterSecret, twitterAccessToken, twitterAccessSecret)
-
-# Get access tokens for instance
-# if len(twitterAccessToken) == 0 or len(twitterAccessSecret) == 0:
-#     twitterAccessToken, twitterAccessSecret = twitter_access_tokens(twitterApiKey, twitterSecret)
-
-# tweet_v2({'text': 'Hello from a bot'}, twitterApiKey, twitterSecret, twitterAccessToken, twitterAccessSecret)
-
-# Grab all tweets we have not yet responded to
-# todo_query = """
-# MATCH (u1:User)-[:POSTED]->(t)-[:MENTIONED]->(u2:User),(t)-[:TAGGED]->(:Tag {name:"inspiredby"})
-# WHERE t:Tweet AND NOT t:Replied
-# RETURN u1.screen_name as screen_name, t.twitter_id as tid, t.text as text
-# """
-# todo_tweets = list(session.run(todo_query))
-# for tweet in todo_tweets:
-#     screen_name = tweet['screen_name']
-#     image_params = {'query': f"MATCH p=(:User {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"}
-#     image_url = "https://inspired-graph.herokuapp.com"
-#     query_string = urllib.parse.urlencode( image_params ) 
-#     image_url = image_url + "?" + query_string 
-#     print(image_url)
-#     create_tweet({'text':'Playing with Bots!'}, )
-
     
+# Run
+# TODO Refactor 
+# Older script moved entirely into this function - works, so not going to touch this for now
+t.import_tweets_v1('#neo4j AND #inspiredby filter:mentions -filter:retweets', twitterBearerToken, n.session)
 
-# Post a tweet to each user with the new graph.
-# post_message = ''
-# post_url = 'https://api.twitter.com/1.1/statuses/update.json?status=%s&attachment_url=%s' % (post_message, post_image_url)
-# post_response = requests.post(post_url, headers = {"accept":"application/json","Authorization":"Bearer " + bearerToken})
+# Get snapshot of tweets we haven't responded to yet
+tweets = n.unprocessed_tweets()
+for tweet in tweets:
+    # Get graph image for user
+    name = tweet['screen_name']
+    if len(name) == 0:
+        logging.error(f'Skipping tweet with no screen_name value: {tweet}')
+        continue
+    img = graph_image(name)
 
-# Assign the 'Replied' label to all tweets we've responded to
+    # Post tweet to user with templated message
+    msg = f"Hey {name} did you know what your 2nd degree #inspiration network looks like? Here you go, it's powered by #neo4j. If you want to explore the data in 3d interactively go here http://dev.neo4j.com/inspired"
+    t.post_tweet_with_image(msg, img)
+
+    # Update db that we've replied to this tweet - do them individually for now in case a failure is encountered
+    n.processed_tweet(tweet)
