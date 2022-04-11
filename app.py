@@ -3,7 +3,6 @@ import os
 import logging
 from dotenv import load_dotenv
 from env_validate import validate_env
-# TODO: Create a package instead?
 from twitter_utils import TwitterUtils
 from neo4j_utils import Neo4jUtils
 from link_utils import graph_image
@@ -23,7 +22,7 @@ twitterSecret = os.environ.get('TWITTER_SECRET', "")
 twitterAccessToken = os.environ.get('TWITTER_ACCESS_TOKEN', "")
 twitterAccessSecret = os.environ.get('TWITTER_ACCESS_SECRET', "")
 twitterBearerToken = os.environ.get('TWITTER_BEARER',"")
-twitterBearerTokenV1 = os.environ.get('TWITTER_BEARER_V1',"")
+# twitterBearerTokenV1 = os.environ.get('TWITTER_BEARER_V1',"")
 
 # TODO: Check all values available
 if len(twitterBearerToken) == 0 : 
@@ -38,19 +37,28 @@ n = Neo4jUtils(neo4jUrl, neo4jUser, neo4jPass)
 # Older script moved entirely into this function - works, so not going to touch this for now
 t.import_tweets_v1('#neo4j AND #inspiredby filter:mentions -filter:retweets', twitterBearerToken, n.session)
 
-# Get snapshot of tweets we haven't responded to yet
+# Get snapshot of all tweets we haven't responded to yet
 tweets = n.unprocessed_tweets()
+
+if len(tweets) == 0:
+    logging.info(f'No unprocessd tweets to respond to.')
+
+# Reply to each target tweet
 for tweet in tweets:
-    # Get graph image for user
+    # Get graph image for each tweeter
     name = tweet['screen_name']
     if len(name) == 0:
         logging.error(f'Skipping tweet with no screen_name value: {tweet}')
         continue
     img = graph_image(name)
+    if img == False:
+        logging.error(f'Could not get graph image for tweeter: {name}')
+        continue
 
     # Post tweet to user with templated message
-    msg = f"Hey {name} did you know what your 2nd degree #inspiration network looks like? Here you go, it's powered by #neo4j. If you want to explore the data in 3d interactively go here http://dev.neo4j.com/inspired"
-    t.post_tweet_with_image(msg, img)
-
-    # Update db that we've replied to this tweet - do them individually for now in case a failure is encountered
-    n.processed_tweet(tweet)
+    # msg = f"Hey {name} did you know what your 2nd degree #inspiration network looks like? Here you go, it's powered by #neo4j. If you want to explore the data in 3d interactively go here http://dev.neo4j.com/inspired"
+    # if t.post_tweet(message=msg, image_as_bytes=img):
+    #     # If successful, update db that we've replied to this tweet - individually in case a failure is encountered with one of the posts
+    #     n.update_tweet(tweet)
+    # else:
+    #     logging.error(f'Problem posting tweet to {name} with message: {msg} and image: {img}')

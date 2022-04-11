@@ -39,9 +39,9 @@ class Neo4jUtils:
             logging.error(e)
             return []
 
-    def processed_tweet(self, tweet):
-        tid = tweet.get('twitter_id', '')
-        if len(tid) == 0:
+    def update_tweet(self, tweet):
+        tid = tweet.get('twitter_id', -1)
+        if tid == -1:
             raise Exception(f'tweet missing twitter_id value')
         query = f"""
         MATCH (t:Tweet {{ twitter_id: {tid} }})

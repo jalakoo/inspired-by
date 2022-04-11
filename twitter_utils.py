@@ -1,5 +1,5 @@
 import logging
-# import tweepy
+import tweepy
 
 class TwitterUtils:
 
@@ -51,6 +51,10 @@ class TwitterUtils:
         if len(self._access_token) == 0 or len(self._access_secret) == 0:
             self._access_token, self._access_secret = get_access_tokens(self, self._api_key, self._secret)
 
+        # Using Tweepy v1
+        auth = tweepy.OAuth1UserHandler(api_key, secret, access_token, access_secret)
+        self.tweepy = tweepy.API(auth)
+
         # Using Tweepy v2
         # auth = tweepy.OAuthHandler(api_key, secret)
         # auth.set_access_token(self._access_token, self._access_secret)
@@ -63,6 +67,7 @@ class TwitterUtils:
 
     # TODO: replace direct use of neo4j session with a callback
     def import_tweets_v1(self, query, bearer_token, neo4j_session):
+        # Using Twitter API v1.1
         # Original script - still works with v1.1 API
         import urllib
         import requests
@@ -101,7 +106,7 @@ class TwitterUtils:
 
         # todo as params
         q = urllib.parse.quote_plus(query)
-        maxPages = 3
+        maxPages = 1
         catch_up = False
         count = 100
         result_type = "recent"
@@ -123,7 +128,7 @@ class TwitterUtils:
                     max_id = record["maxId"]
 
             # Build URL.
-            print(f'url query: {q}')
+            # print(f'url query: {q}')
             apiUrl = "https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%s&result_type=%s&lang=%s" % (q, count, result_type, lang)
             if since_id != -1 :
                 apiUrl += "&since_id=%s" % (since_id)
@@ -139,19 +144,21 @@ class TwitterUtils:
 
             tweets = json.get("statuses",[])   
             # print(tweets) 
-            print(len(tweets))
+            # print(len(tweets))
             if len(tweets) > 0:
+                logging.info(f'Processing additional tweets: {len(tweets)}')
                 # print(tweets[0])
                 result = neo4j_session.run(importQuery,{"tweets":tweets})
                 print(result.consume().counters)
                 page = page + 1
             else:
+                logging.info('Completed tweet import')
                 hasMore = False
                 
-            print("page {page} max_id {max_id}".format(page=page,max_id=max_id))
+            # print("page {page} max_id {max_id}".format(page=page,max_id=max_id))
             time.sleep(1)
             if json.get('backoff',None) != None:
-                print("backoff",json['backoff'])
+                # print("backoff",json['backoff'])
                 time.sleep(json['backoff']+5)
     
     def get_tweets(self, query):
@@ -183,47 +190,65 @@ class TwitterUtils:
         logging.info(json.dumps(json_response, indent=4, sort_keys=True))
         
 
-    def post_tweet(payload, consumer_key, consumer_secret, access_token, access_token_secret):
-        import json
-        from requests_oauthlib import OAuth1Session
+    # def post_tweet(self, payload, consumer_key, consumer_secret, access_token, access_token_secret):
+    #     import json
+    #     from requests_oauthlib import OAuth1Session
 
-        # Make the request
-        oauth = OAuth1Session(
-            consumer_key,
-            client_secret=consumer_secret,
-            resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret,
-        )
+    #     # Make the request
+    #     oauth = OAuth1Session(
+    #         consumer_key,
+    #         client_secret=consumer_secret,
+    #         resource_owner_key=access_token,
+    #         resource_owner_secret=access_token_secret,
+    #     )
 
-        # Making the request
-        response = oauth.post(
-            "https://api.twitter.com/2/tweets",
-            json=payload,
-        )
+    #     # Making the request
+    #     response = oauth.post(
+    #         "https://api.twitter.com/2/tweets",
+    #         json=payload,
+    #     )
 
-        if response.status_code != 201:
-            raise Exception(
-                "Request returned an error: {} {}".format(response.status_code, response.text)
-            )
+    #     if response.status_code != 201:
+    #         raise Exception(
+    #             "Request returned an error: {} {}".format(response.status_code, response.text)
+    #         )
 
-        print("Response code: {}".format(response.status_code))
+    #     print("Response code: {}".format(response.status_code))
 
-        # Saving the response as JSON
-        json_response = response.json()
-        print(json.dumps(json_response, indent=4, sort_keys=True))
-        # Sample response
-        #     Response code: 201
-        # {
-        #     "data": {
-        #         "id": "1512150017871532032",
-        #         "text": "Hello from a bot"
-        #     }
-        # }
+    #     # Saving the response as JSON
+    #     json_response = response.json()
+    #     print(json.dumps(json_response, indent=4, sort_keys=True))
+    #     # Sample response
+    #     #     Response code: 201
+    #     # {
+    #     #     "data": {
+    #     #         "id": "1512150017871532032",
+    #     #         "text": "Hello from a bot"
+    #     #     }
+    #     # }
 
-    def post_tweet_with_image(self, message, image):
-        # Can't upload with v2! Need to use v1
-        # TODO
-        url = 'https://upload.twitter.com/1.1/media/upload.json?media_category=tweet_image'
-        print('unimplemented')
+    def post_tweet(self, message, image_as_bytes):
+        # from PIL import Image
+        # import io
+        # Can't upload with v2! Need to use v1!
+
+        try:
+            # 1. Upload media
+            # with io.BytesIO() as buf:
+            #     image.save(buf, 'png')
+            #     image_bytes = buf.getvalue()
+            media = self.tweepy.simple_upload(filename="neo4j_graph.png", file=image_as_bytes)
+            # TODO: Is this the best way to test failure?
+            if media.media_id == None:
+                # Something went wrong
+                logging.error(f'No media returned for file upload for tweet with message: {message}, image: {image_as_bytes}')
+                return False
+            # 2. Post tweet if we got a media id back
+            post_result = self.tweepy.update_status(status=message, media_ids=[media.media_id])
+            logging.info(f'Updated status with message: {message} and media id: {media.media_id}. Result: {post_result}')
+            return True
+        except Exception as e:
+            logging.error(e)
+            return False
 
 
