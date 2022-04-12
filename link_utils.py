@@ -7,8 +7,12 @@ def graph_image(screen_name):
     import io
     from urllib.request import urlopen
 
-    neo4j_query = f"MATCH p=(:Person {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"
-    params = {'query': neo4j_query}
+    # Old params
+    # neo4j_query = f"MATCH p=(:Person {{screen_name:'{screen_name}'}})-[:INSPIRED*2]-() RETURN p"
+    # params = {'query': neo4j_query}
+    
+    # New params
+    params = {'user': screen_name}
     image_url = "https://inspired-graph.herokuapp.com"
 
     response = requests.get(image_url, params)
@@ -17,7 +21,10 @@ def graph_image(screen_name):
         return False
 
     bytes = io.BytesIO(response.content)
+
+    # Uncomment to check image for local testing
     # img = Image.open(bytes)
     # img.show()
+    
     logging.info(f'Graph image url: {response.url}, response: {response}')
     return bytes

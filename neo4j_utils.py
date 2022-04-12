@@ -26,7 +26,7 @@ class Neo4jUtils:
 
     def unprocessed_tweets(self):
         import urllib
-        # Grab all tweets we have not yet responded to
+        # Grab all tweets we have not yet responded to (those labeled :Replied)
         query = """
         MATCH (u1:User)-[:POSTED]->(t)-[:MENTIONED]->(u2:User),(t)-[:TAGGED]->(:Tag {name:"inspiredby"})
         WHERE t:Tweet AND NOT t:Replied

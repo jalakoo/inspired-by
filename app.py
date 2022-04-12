@@ -22,7 +22,6 @@ twitterSecret = os.environ.get('TWITTER_SECRET', "")
 twitterAccessToken = os.environ.get('TWITTER_ACCESS_TOKEN', "")
 twitterAccessSecret = os.environ.get('TWITTER_ACCESS_SECRET', "")
 twitterBearerToken = os.environ.get('TWITTER_BEARER',"")
-# twitterBearerTokenV1 = os.environ.get('TWITTER_BEARER_V1',"")
 
 # TODO: Check all values available
 if len(twitterBearerToken) == 0 : 
@@ -56,9 +55,9 @@ for tweet in tweets:
         continue
 
     # Post tweet to user with templated message
-    # msg = f"Hey {name} did you know what your 2nd degree #inspiration network looks like? Here you go, it's powered by #neo4j. If you want to explore the data in 3d interactively go here http://dev.neo4j.com/inspired"
-    # if t.post_tweet(message=msg, image_as_bytes=img):
-    #     # If successful, update db that we've replied to this tweet - individually in case a failure is encountered with one of the posts
-    #     n.update_tweet(tweet)
-    # else:
-    #     logging.error(f'Problem posting tweet to {name} with message: {msg} and image: {img}')
+    msg = f"Hey @{name} did you know what your 2nd degree #inspiration network looks like? Here you go, it's powered by #neo4j. If you want to explore the data in 3d interactively go here http://dev.neo4j.com/inspired"
+    if t.post_tweet(message=msg, image_as_bytes=img):
+        # If successful, update db that we've replied to this tweet - individually in case a failure is encountered with one of the posts
+        n.update_tweet(tweet)
+    else:
+        logging.error(f'Problem posting tweet to {name} with message: {msg} and image: {img}')

@@ -106,7 +106,7 @@ class TwitterUtils:
 
         # todo as params
         q = urllib.parse.quote_plus(query)
-        maxPages = 1
+        maxPages = 5
         catch_up = False
         count = 100
         result_type = "recent"
@@ -190,59 +190,24 @@ class TwitterUtils:
         logging.info(json.dumps(json_response, indent=4, sort_keys=True))
         
 
-    # def post_tweet(self, payload, consumer_key, consumer_secret, access_token, access_token_secret):
-    #     import json
-    #     from requests_oauthlib import OAuth1Session
-
-    #     # Make the request
-    #     oauth = OAuth1Session(
-    #         consumer_key,
-    #         client_secret=consumer_secret,
-    #         resource_owner_key=access_token,
-    #         resource_owner_secret=access_token_secret,
-    #     )
-
-    #     # Making the request
-    #     response = oauth.post(
-    #         "https://api.twitter.com/2/tweets",
-    #         json=payload,
-    #     )
-
-    #     if response.status_code != 201:
-    #         raise Exception(
-    #             "Request returned an error: {} {}".format(response.status_code, response.text)
-    #         )
-
-    #     print("Response code: {}".format(response.status_code))
-
-    #     # Saving the response as JSON
-    #     json_response = response.json()
-    #     print(json.dumps(json_response, indent=4, sort_keys=True))
-    #     # Sample response
-    #     #     Response code: 201
-    #     # {
-    #     #     "data": {
-    #     #         "id": "1512150017871532032",
-    #     #         "text": "Hello from a bot"
-    #     #     }
-    #     # }
-
     def post_tweet(self, message, image_as_bytes):
-        # from PIL import Image
-        # import io
-        # Can't upload with v2! Need to use v1!
-
+        # Can't upload media with v2! Need to use v1!
         try:
-            # 1. Upload media
+
+            # 1. Upload image file first
+
+            # Uncomment if switching to passing image objects directly
             # with io.BytesIO() as buf:
             #     image.save(buf, 'png')
             #     image_bytes = buf.getvalue()
+
             media = self.tweepy.simple_upload(filename="neo4j_graph.png", file=image_as_bytes)
-            # TODO: Is this the best way to test failure?
+            # TODO: This the best way to test failure?
             if media.media_id == None:
-                # Something went wrong
+                # Oop - something went wrong
                 logging.error(f'No media returned for file upload for tweet with message: {message}, image: {image_as_bytes}')
                 return False
+
             # 2. Post tweet if we got a media id back
             post_result = self.tweepy.update_status(status=message, media_ids=[media.media_id])
             logging.info(f'Updated status with message: {message} and media id: {media.media_id}. Result: {post_result}')
