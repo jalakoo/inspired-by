@@ -52,5 +52,3 @@ class Neo4jUtils:
             self.session.run(query)
         except Exception as e:
             logging.error(e)
-
-    
