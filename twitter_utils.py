@@ -1,4 +1,5 @@
 import logging
+from os import access
 import tweepy
 
 class TwitterUtils:
@@ -106,7 +107,7 @@ class TwitterUtils:
 
         # todo as params
         q = urllib.parse.quote_plus(query)
-        maxPages = 5
+        maxPages = 2
         catch_up = False
         count = 100
         result_type = "recent"
@@ -132,8 +133,8 @@ class TwitterUtils:
             apiUrl = "https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%s&result_type=%s&lang=%s" % (q, count, result_type, lang)
             if since_id != -1 :
                 apiUrl += "&since_id=%s" % (since_id)
-            if max_id != -1 :
-                apiUrl += "&max_id=%s" % (max_id)
+            # if max_id != -1 :
+            #     apiUrl += "&max_id=%s" % (max_id)
             response = requests.get(apiUrl, headers = {"accept":"application/json","Authorization":"Bearer " + bearer_token})
             if response.status_code != 200:
                 raise("%s : %s" % (response.status_code, response.text))
@@ -161,6 +162,28 @@ class TwitterUtils:
                 # print("backoff",json['backoff'])
                 time.sleep(json['backoff']+5)
     
+    def get_tweets_v1(self, query, bearer_token, since_id=-1):
+        # Using Twitter API v1.1
+        import urllib
+        import requests
+
+        q = urllib.parse.quote_plus(query)
+        count = 100
+        result_type = "recent"
+        lang = "en"
+
+        apiUrl = "https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%s&result_type=%s&lang=%s" % (q, count, result_type, lang)
+        if since_id != -1 :
+            apiUrl += "&since_id=%s" % (since_id)
+        response = requests.get(apiUrl, headers = {"accept":"application/json","Authorization":"Bearer " + bearer_token})
+        if response.status_code != 200:
+            raise("%s : %s" % (response.status_code, response.text))
+        logging.info(response.text)
+        json = response.json()
+        tweets = json.get("statuses",[])
+        return tweets
+
+
     def get_tweets(self, query):
         # v2 API
         import requests
@@ -190,7 +213,7 @@ class TwitterUtils:
         logging.info(json.dumps(json_response, indent=4, sort_keys=True))
         
 
-    def post_tweet(self, message, image_as_bytes):
+    def post_tweet(self, twitter_id, message, image_name, image_as_bytes):
         # Can't upload media with v2! Need to use v1!
         try:
 
@@ -201,18 +224,22 @@ class TwitterUtils:
             #     image.save(buf, 'png')
             #     image_bytes = buf.getvalue()
 
-            media = self.tweepy.simple_upload(filename="neo4j_graph.png", file=image_as_bytes)
+            media = self.tweepy.simple_upload(filename=image_name, file=image_as_bytes)
             # TODO: This the best way to test failure?
             if media.media_id == None:
                 # Oop - something went wrong
                 logging.error(f'No media returned for file upload for tweet with message: {message}, image: {image_as_bytes}')
                 return False
 
+            logging.info(f'Uploaded media object: {media}')
+
             # 2. Post tweet if we got a media id back
-            post_result = self.tweepy.update_status(status=message, media_ids=[media.media_id])
+            # in_reply_to_status_id should be a string?
+            post_result = self.tweepy.update_status(status=message, media_ids=[media.media_id], in_reply_to_status_id=twitter_id, auto_populate_reply_metadata=True)
             logging.info(f'Updated status with message: {message} and media id: {media.media_id}. Result: {post_result}')
             return True
         except Exception as e:
+            logging.info(f'Failed to post tweet with id: {twitter_id}, message: {message}, image: {image_as_bytes}')
             logging.error(e)
             return False
 
